@@ -1,0 +1,80 @@
+*&---------------------------------------------------------------------*
+*& INCLUDE         Functions
+*&---------------------------------------------------------------------*
+
+*&---------------------------------------------------------------------*
+*& Form print_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM print_data .
+    DATA: ls_composer_param     TYPE ssfcompop.
+    DATA: lwa_lips  TYPE lips,
+          lwa_t001k TYPE t001k,
+          lwa_tvko  TYPE tvko.
+
+    control_parameters-no_dialog =      "是否彈出對話框
+    control_parameters-preview =        "預覽
+    output_options-tdnewid = 'X'.       "新的佇列請求
+    CALL FUNCTION 'SSF_FUNCTION_MODULE_NAME'
+      EXPORTING
+        formname           = 'ZRPPOT503'
+      IMPORTING
+        fm_name            = w_fm_name
+      EXCEPTIONS
+        no_form            = 1
+        no_function_module = 2
+        OTHERS             = 3.
+    IF sy-subrc <> 0.
+      MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+      WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+    ENDIF.
+
+*    SORT t_head BY vbeln.
+
+    CLEAR wa_head.
+    LOOP AT t_head INTO wa_head.
+
+*      IF sy-ucomm = 'PRNT' OR sy-ucomm = 'VIEW'.
+*        CLEAR: lwa_tvko.
+*        SELECT SINGLE * FROM tvko INTO CORRESPONDING FIELDS OF lwa_tvko
+*          WHERE vkorg = p_vkorg.
+*        IF sy-subrc = 0.
+*          SELECT SINGLE zz1_zzusecode03 FROM zutm13 INTO ls_composer_param-tddest
+*            WHERE zz1_zzutcode = 'Z_DN_PG_DN_PRINT' AND bukrs = lwa_tvko-bukrs
+*              AND zz1_zzusecode01 = wa_head-werks AND zz1_zzusecode02 = sy-uname.
+*          IF sy-subrc <> 0.
+*            SELECT SINGLE zz1_zzusecode03 FROM zutm13 INTO ls_composer_param-tddest
+*              WHERE zz1_zzutcode = 'Z_DN_PG_DN_PRINT' AND bukrs = lwa_tvko-bukrs
+*                AND zz1_zzusecode01 = wa_head-werks AND zz1_zzusecode02 = ''.
+*          ENDIF.
+*        ENDIF.
+*      ELSE.
+*        IMPORT ls_composer_param-tddest FROM MEMORY ID 'ZZTDDEST'.
+*      ENDIF.
+
+
+      AT FIRST.
+        control_parameters-no_close = 'X'.
+      ENDAT.
+      AT LAST.
+        control_parameters-no_close = space.
+      ENDAT.
+      CALL FUNCTION w_fm_name
+        EXPORTING
+          control_parameters = control_parameters
+          output_options     = output_options
+          user_settings      = space
+          is_head            = wa_head
+          prog_id            = sy-repid.
+      IF sy-subrc <> 0.
+        MESSAGE ID sy-msgid TYPE sy-msgty NUMBER sy-msgno
+               WITH sy-msgv1 sy-msgv2 sy-msgv3 sy-msgv4.
+      ENDIF.
+      control_parameters-no_open = 'X'.
+    ENDLOOP.
+    CLEAR: control_parameters-no_close, control_parameters-no_open.
+ENDFORM.
