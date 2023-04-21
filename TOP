@@ -1,0 +1,137 @@
+*&---------------------------------------------------------------------*
+*& INCLUDE     3TOP
+*&---------------------------------------------------------------------*
+TABLES: vbak, vbap.
+
+DATA:
+      "BOM Connect
+      wa_mast LIKE mast,
+      t_mast LIKE STANDARD TABLE OF wa_mast,
+      "BOM Detail.
+      wa_stko LIKE stko,
+      t_stko LIKE STANDARD TABLE OF stko,
+      wa_stko2 LIKE wa_stko,
+      t_stko2 LIKE STANDARD TABLE OF wa_stko2,
+      wa_stpo LIKE stpo,
+      t_stpo LIKE STANDARD TABLE OF wa_stpo,
+      wa_stpo2 LIKE wa_stpo,
+      t_stpo2 LIKE STANDARD TABLE OF wa_stpo2,
+
+      w_page TYPE i,
+      w_count TYPE i,
+      w_direction(200),
+      w_mod TYPE i,
+      w_div TYPE i,
+      w_string TYPE string,
+      w_number TYPE p,
+      w_menge TYPE stpo-menge,
+      w_menge2 TYPE stpo-menge.
+
+
+*DATA: BEGIN OF wa_head,
+*        vbeln TYPE vbak-vbeln,
+*        kunnr TYPE vbak-kunnr,
+*        auart TYPE vbak-auart,
+*        mcod1 TYPE kna1-mcod1,
+*        vbeln_out(15),
+*        matkl TYPE vbap-matkl,
+*        wgbez TYPE t023t-wgbez,
+*        kwmeng TYPE vbap-kwmeng,
+*        vrkme TYPE vbap-vrkme,
+*
+*        matnr TYPE vbap-matnr,
+*        zz1direction TYPE zppm50-zz1direction,    "診斷結果
+*
+*        erdat TYPE vbak-erdat,
+*        page(2),
+*      END OF wa_head,
+*      t_head LIKE STANDARD TABLE OF wa_head.
+
+DATA: wa_head LIKE zppr53,
+      t_head LIKE STANDARD TABLE OF zppr53.
+
+DATA: BEGIN OF wa_detail,
+        vbeln TYPE vbap-vbeln,
+        posnr TYPE vbap-posnr,
+        "head
+        matkl TYPE vbap-matkl,
+        "detail
+        name TYPE ausp-atwrt,
+        matnr TYPE vbap-matnr,
+        kwmeng TYPE vbap-kwmeng,
+        vrkme TYPE vbap-vrkme,
+        brgew TYPE vbap-brgew,
+        quantity TYPE p LENGTH 12 DECIMALS 3,
+        quantity_out(15),
+        zz1period TYPE zppm50-zz1period,  "停藥期
+        uepos TYPE vbap-uepos,
+      END OF wa_detail,
+      t_detail LIKE STANDARD TABLE OF wa_detail,
+      wa_det LIKE wa_detail,
+      t_det LIKE STANDARD TABLE OF wa_det.
+
+"物料群組說明
+DATA: BEGIN OF wa_t023t,
+        matkl TYPE t023t-matkl,
+        wgbez TYPE t023t-wgbez,
+      END OF wa_t023t,
+      t_t023t LIKE STANDARD TABLE OF wa_t023t.
+
+DATA: BEGIN OF wa_zppm50,
+        zz1sdgroup TYPE zppm50-zz1sdgroup,
+        zz1matnb TYPE zppm50-zz1matnb,
+        zz1direction TYPE zppm50-zz1direction,
+        zz1period TYPE zppm50-zz1period,
+      END OF wa_zppm50,
+      t_zppm50 LIKE STANDARD TABLE OF wa_zppm50.
+
+
+DATA: BEGIN OF wa_ausp,
+        objek TYPE ausp-objek,
+        atnam TYPE cabn-atnam,
+        atwrt TYPE ausp-atwrt,
+      END OF wa_ausp,
+      t_ausp LIKE STANDARD TABLE OF wa_ausp.
+
+DATA: BEGIN OF wa_kna1,
+        kunnr TYPE kna1-kunnr,
+        sortl TYPE kna1-sortl,
+      END OF wa_kna1,
+      t_kna1 LIKE STANDARD TABLE OF wa_kna1.
+
+"Convert KG to PPM.
+DATA: BEGIN OF wa_marm,
+        matnr TYPE marm-matnr,
+        meinh TYPE marm-meinh,
+        umrez TYPE marm-umrez,   " value Y.
+        umren TYPE marm-umren,    "value X.
+      END OF wa_marm,
+      t_marm LIKE STANDARD TABLE OF wa_marm.
+
+DATA: BEGIN OF wa_mara,
+        matnr TYPE mara-matnr,
+        matkl TYPE mara-matkl,
+      END OF wa_mara,
+      t_mara LIKE STANDARD TABLE OF wa_mara.
+
+*Smartform
+DATA: output_options     TYPE ssfcompop,
+      control_parameters TYPE ssfctrlop,
+      w_fm_name          TYPE rs38l_fnam.
+
+***********************************************************************
+* Selection Screen / Option / Parameter
+***********************************************************************
+PARAMETERS p_werks TYPE vbap-werks OBLIGATORY.
+SELECT-OPTIONS: s_auart FOR vbak-auart NO-EXTENSION NO INTERVALS,
+                s_kunnr FOR vbak-kunnr NO-EXTENSION NO INTERVALS.
+PARAMETERS p_vblow TYPE vbak-vbeln.
+PARAMETERS p_vbhigh TYPE vbak-vbeln.
+SELECT-OPTIONS s_vbeln FOR vbak-vbeln NO-DISPLAY.
+
+PARAMETERS p_dlow TYPE vbak-erdat.
+PARAMETERS p_dhigh TYPE vbak-erdat.
+SELECT-OPTIONS s_erdat FOR vbak-erdat NO-DISPLAY.
+
+SELECT-OPTIONS s_matnr FOR vbap-matnr NO-EXTENSION NO INTERVALS.
+SELECT-OPTIONS s_matkl FOR vbap-matkl NO-EXTENSION NO INTERVALS.
