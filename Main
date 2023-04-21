@@ -1,0 +1,332 @@
+REPORT PPreport MESSAGE-ID zpp.
+***********************************************************************
+* Description  : 處方箋列印
+***********************************************************************
+INCLUDE top.
+INCLUDE function.
+***********************************************************************
+* INITIALIZATION
+***********************************************************************
+INITIALIZATION.
+***********************************************************************
+*AT SELECTION SCREEN
+***********************************************************************
+AT SELECTION-SCREEN.
+    IF p_vblow IS NOT INITIAL AND p_vbhigh IS NOT INITIAL.
+        s_vbeln+0(3) = 'IBT'.
+        s_vbeln-low = p_vblow.
+        s_vbeln-high = p_vbhigh.
+        APPEND s_vbeln.
+    ELSEIF p_vblow IS NOT INITIAL.
+        s_vbeln+0(3) = 'IEQ'.
+        s_vbeln-low = p_vblow.
+        APPEND s_vbeln.
+    ELSEIF p_vbhigh IS NOT INITIAL.
+        s_vbeln+0(3) = 'IEQ'.
+        s_vbeln-high = p_vbhigh.
+        APPEND s_vbeln.
+    ENDIF.
+
+    IF p_dlow IS NOT INITIAL AND p_dhigh IS NOT INITIAL.
+        s_erdat+0(3) = 'IBT'.
+        s_erdat-low = p_dlow.
+        s_erdat-high = p_dhigh.
+        APPEND s_erdat.
+    ELSEIF p_dlow IS NOT INITIAL.
+        s_erdat+0(3) = 'IEQ'.
+        s_erdat-low = p_dlow.
+        APPEND s_erdat.
+    ELSEIF p_dhigh IS NOT INITIAL.
+        s_erdat+0(3) = 'IEQ'.
+        s_erdat-high = p_dhigh.
+        APPEND s_erdat.
+    ENDIF.
+***********************************************************************
+* Start-of-selection PAUL
+***********************************************************************
+START-OF-SELECTION.
+    PERFORM read_data.
+***********************************************************************
+* End-of-selection PAUL
+***********************************************************************
+END-OF-SELECTION.
+    IF t_head[] IS INITIAL.
+        MESSAGE s999.
+    ELSE.
+        PERFORM print_data.
+    ENDIF.
+*&---------------------------------------------------------------------*
+*& Form read_data
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM read_data .
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE t_stpo FROM stpo.
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE t_mast FROM mast.
+    SELECT * INTO CORRESPONDING FIELDS OF TABLE t_stko FROM stko.
+
+    SELECT matkl wgbez INTO CORRESPONDING FIELDS OF TABLE t_t023t FROM t023t
+      WHERE spras = sy-langu.
+    SELECT zz1sdgroup zz1matnb zz1direction zz1period INTO CORRESPONDING FIELDS OF TABLE t_zppm50
+      FROM zppm50.
+    SELECT a~objek b~atnam a~atwrt INTO CORRESPONDING FIELDS OF TABLE t_ausp
+      FROM ausp AS a JOIN cabn AS b ON a~atinn = b~atinn.
+    SELECT kunnr sortl INTO CORRESPONDING FIELDS OF TABLE t_kna1 FROM kna1.
+
+    SELECT matnr meinh umrez umren INTO CORRESPONDING FIELDS OF TABLE t_marm FROM marm
+      WHERE meinh = 'PPM'.
+
+    "Header
+    SELECT k~vbeln k~erdat k~kunnr k~auart INTO CORRESPONDING FIELDS OF TABLE t_head
+      FROM vbak AS k JOIN vbap AS p ON k~vbeln = p~vbeln
+      WHERE p~werks = p_werks AND k~auart IN s_auart
+      AND k~kunnr IN s_kunnr AND k~vbeln IN s_vbeln
+      AND k~erdat IN s_erdat AND p~matkl IN s_matkl.
+
+    SORT t_head BY vbeln.
+    DELETE ADJACENT DUPLICATES FROM t_head COMPARING vbeln.
+
+
+    "Detail
+    IF t_head[] IS NOT INITIAL.
+        SELECT vbeln posnr matkl kwmeng vrkme matnr brgew uepos INTO CORRESPONDING FIELDS OF TABLE t_detail
+          FROM vbap FOR ALL ENTRIES IN t_head WHERE vbeln = t_head-vbeln.
+        SORT t_detail BY vbeln posnr.
+    ENDIF.
+
+    IF t_detail[] IS NOT INITIAL.
+        SELECT matnr matkl INTO CORRESPONDING FIELDS OF TABLE t_mara
+          FROM mara FOR ALL ENTRIES IN t_detail WHERE matnr = t_detail-matnr.
+    ENDIF.
+
+    t_det[] = t_detail[].
+    t_stpo2[] = t_stpo[].
+    t_stko2[] = t_stko[].
+
+    PERFORM get_desc.
+
+    DELETE t_detail WHERE name IS INITIAL.
+    DELETE t_detail WHERE matkl <> 'Y1'.
+
+    CLEAR wa_head.
+    LOOP AT t_head INTO wa_head.
+        CLEAR wa_detail.
+        READ TABLE t_detail INTO wa_detail WITH KEY vbeln = wa_head-vbeln matkl = 'Y1'.
+        IF wa_detail IS INITIAL.
+            wa_head-delete = 'X'.
+        ENDIF.
+        MODIFY t_head FROM wa_head.
+    ENDLOOP.
+    DELETE t_head WHERE delete = 'X'.
+
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form get_desc
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM get_desc .
+
+    CLEAR: wa_head.
+    LOOP AT t_head INTO wa_head.
+
+        CONCATENATE wa_head-auart '-' wa_head-vbeln INTO wa_head-vbeln_out.
+
+        "名稱
+        CLEAR wa_kna1.
+        READ TABLE t_kna1 INTO wa_kna1 WITH KEY kunnr = wa_head-kunnr.
+        wa_head-sortl = wa_kna1-sortl.
+
+        "轉換單位
+        CLEAR wa_detail.
+        READ TABLE t_detail INTO wa_detail WITH KEY vbeln = wa_head-vbeln.
+        wa_head-matnr = wa_detail-matnr.
+        wa_head-kwmeng = wa_detail-kwmeng.
+
+        IF wa_detail-vrkme = 'KG'.
+            wa_head-number = wa_detail-kwmeng.
+        ELSEIF wa_detail-brgew IS NOT INITIAL.
+            wa_head-number = wa_detail-brgew.
+        ELSE.
+            wa_head-number = '單位異常'.
+        ENDIF.
+        PERFORM change USING wa_head-number wa_head-number.
+
+        CLEAR wa_mara.
+        READ TABLE t_mara INTO wa_mara WITH KEY matnr = wa_detail-matnr.
+        wa_head-matkl = wa_mara-matkl.
+
+        "Catch Name of group
+        CLEAR wa_t023t.
+        READ TABLE t_t023t INTO wa_t023t WITH KEY matkl = wa_head-matkl.
+        wa_head-wgbez = wa_t023t-wgbez.
+
+        "診斷結果
+        CLEAR: wa_detail, w_direction, w_count.
+        LOOP AT t_detail INTO wa_detail WHERE vbeln = wa_head-vbeln AND matkl = 'Y1'.
+
+            CLEAR wa_zppm50.
+            READ TABLE t_zppm50 INTO wa_zppm50 WITH KEY zz1sdgroup = wa_head-matkl zz1matnb = wa_detail-matnr.
+            IF w_direction IS INITIAL.
+                w_direction = wa_zppm50-zz1direction.
+            ELSE.
+                CONCATENATE w_direction wa_zppm50-zz1direction INTO w_direction SEPARATED BY '。'.
+            ENDIF.
+
+            w_count += 1.
+        ENDLOOP.
+
+        IF w_direction IS NOT INITIAL.
+            CONCATENATE w_direction '。' INTO wa_head-result.
+        ENDIF.
+
+        CLEAR: w_mod, w_div.
+        w_mod = w_count MOD 6.
+        w_div = w_count DIV 6.
+
+        IF w_mod = 0.
+            wa_head-page = w_div.
+        ELSE.
+            wa_head-page = w_div + 1.
+        ENDIF.
+
+        "日期分割
+        wa_head-year = wa_head-erdat+0(4) - 1911.
+        wa_head-month = wa_head-erdat+4(2).
+        wa_head-day = wa_head-erdat+6(2).
+
+        MODIFY t_head FROM wa_head.
+    ENDLOOP.
+
+
+    CLEAR: wa_detail, w_direction.
+    LOOP AT t_detail INTO wa_detail WHERE matkl = 'Y1'.
+
+        CLEAR wa_ausp.
+        READ TABLE t_ausp INTO wa_ausp WITH KEY objek = wa_detail-matnr atnam = 'Z_FS_MC_014'.
+        IF wa_ausp-atwrt = 'X'.
+            CLEAR wa_mast.
+            READ TABLE t_mast INTO wa_mast WITH KEY werks = p_werks matnr = wa_detail-matnr.
+            CLEAR wa_stpo.
+            LOOP AT t_stpo INTO wa_stpo WHERE stlnr = wa_mast-stlnr.
+                wa_detail-matnr = wa_stpo-idnrk.
+                APPEND wa_detail TO t_detail.
+            ENDLOOP.
+        ELSE.
+            CLEAR wa_ausp.
+            READ TABLE t_ausp INTO wa_ausp WITH KEY objek = wa_detail-matnr atnam = 'Z_FS_MC_010'.
+            IF wa_ausp IS NOT INITIAL.
+                wa_detail-name = wa_ausp-atwrt.
+            ELSE.
+                READ TABLE t_ausp INTO wa_ausp WITH KEY objek = wa_detail-matnr atnam = 'Z_FS_MC_011'.
+                wa_detail-name = wa_ausp-atwrt.
+            ENDIF.
+        ENDIF.
+
+        IF wa_detail-name IS INITIAL.
+            CLEAR wa_detail.
+        ENDIF.
+
+
+        IF wa_detail-vrkme <> 'KG'.
+            wa_detail-kwmeng = wa_detail-brgew.
+        ENDIF.
+
+        "Calculation on the PPM
+        CLEAR wa_head.
+        READ TABLE t_head INTO wa_head WITH KEY vbeln = wa_detail-vbeln.
+
+        CLEAR: wa_det, w_number.
+        LOOP AT t_det INTO wa_det WHERE vbeln = wa_detail-vbeln AND uepos IS INITIAL.
+
+            CLEAR wa_mast.
+            READ TABLE t_mast INTO wa_mast WITH KEY werks = p_werks matnr = wa_det-matnr.
+            IF wa_mast IS NOT INITIAL.
+                CLEAR wa_stko.
+                READ TABLE t_stko INTO wa_stko WITH KEY stlnr = wa_mast-stlnr.
+                CLEAR wa_stpo.
+                LOOP AT t_stpo INTO wa_stpo WHERE stlnr = wa_mast-stlnr.
+                    wa_stpo-menge /= wa_stko-bmeng.
+                    IF wa_stpo-idnrk = wa_detail-matnr.
+                        wa_stpo-menge *= wa_det-kwmeng.
+                        wa_detail-kwmeng += wa_stpo-menge.
+                    ELSE.
+                        CLEAR wa_mast.
+                        READ TABLE t_mast INTO wa_mast WITH KEY werks = p_werks matnr = wa_stpo-idnrk.
+                        CLEAR wa_stpo2.
+                        CLEAR wa_stko2.
+                        READ TABLE t_stko2 INTO wa_stko2 WITH KEY stlnr = wa_mast-stlnr.
+                        LOOP AT t_stpo2 INTO wa_stpo2 WHERE stlnr = wa_mast-stlnr.
+                            wa_stpo2-menge /= wa_stko2-bmeng.
+                            IF wa_stpo2-idnrk = wa_detail-matnr.
+                                wa_stpo2-menge *= wa_stpo-menge.
+                                wa_stpo2-menge *= wa_det-kwmeng.
+                                wa_detail-kwmeng += wa_stpo2-menge.
+                            ENDIF.
+                        ENDLOOP.
+                    ENDIF.
+                ENDLOOP.
+            ENDIF.
+        ENDLOOP.
+
+        IF wa_head-number <> '單位異常'.
+            w_number = wa_head-number.
+            wa_detail-kwmeng *= 1000.
+            wa_detail-quantity = wa_detail-kwmeng / w_number.
+        ELSE.
+            wa_detail-quantity = 0.
+        ENDIF.
+
+        IF wa_detail-quantity <> 0.
+
+            CLEAR: wa_marm, w_string.
+            READ TABLE t_marm INTO wa_marm WITH KEY matnr = wa_detail-matnr.
+            IF wa_marm IS NOT INITIAL.
+                wa_detail-quantity = wa_detail-quantity * wa_marm-umren / wa_marm-umrez.
+                PERFORM change USING wa_detail-quantity w_string.
+                CONCATENATE w_string 'PPM' INTO wa_detail-quantity_out SEPARATED BY space.
+            ELSE.
+                PERFORM change USING wa_detail-quantity w_string.
+                CONCATENATE w_string 'KG' INTO wa_detail-quantity_out SEPARATED BY space.
+            ENDIF.
+        ENDIF.
+
+        "停藥期
+        CLEAR wa_zppm50.
+        READ TABLE t_zppm50 INTO wa_zppm50 WITH KEY zz1sdgroup = wa_head-matkl zz1matnb = wa_detail-matnr.
+        wa_detail-zz1period = wa_zppm50-zz1period.
+
+        MODIFY t_detail FROM wa_detail.
+    ENDLOOP.
+ENDFORM.
+*&---------------------------------------------------------------------*
+*& Form change
+*&---------------------------------------------------------------------*
+*& text
+*&---------------------------------------------------------------------*
+*& -->  p1        text
+*& <--  p2        text
+*&---------------------------------------------------------------------*
+FORM change USING l_value l_target.
+    DATA: l_string TYPE string,
+          l_quan TYPE p LENGTH 15.
+
+    l_quan = l_value.
+    l_string = l_quan.
+    CLEAR l_value.
+
+    CONDENSE l_string NO-GAPS.
+    SHIFT l_string RIGHT DELETING TRAILING '0'.
+    SHIFT l_string RIGHT DELETING TRAILING '.'.
+
+    l_target = l_string.
+
+    CONDENSE l_target NO-GAPS.
+
+ENDFORM.
